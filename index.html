@@ -66,9 +66,9 @@
         tr:last-child td:first-child { border-bottom-left-radius: 8px; }
         tr:last-child td:last-child { border-bottom-right-radius: 8px; }
         .owed { color: #dc2626; font-weight: 600; }
-        .owed::before { content: '- ₹'; } /* Changed to Rupee symbol */
+        .owed::before { content: '- ₹'; }
         .is-owed { color: #16a34a; font-weight: 600; }
-        .is-owed::before { content: '+ ₹'; } /* Changed to Rupee symbol */
+        .is-owed::before { content: '+ ₹'; }
         .delete-btn {
             background-color: #ef4444; /* Red 500 */
             color: white;
@@ -211,6 +211,10 @@
                             <!-- Balances will be displayed here by JavaScript -->
                             <p class="text-gray-500">Add expenses to see balances.</p>
                         </div>
+                         <h3 class="text-xl font-medium text-gray-700 mb-2 mt-6">Settlement Breakdown</h3>
+                        <div id="settlementBreakdown" class="space-y-2 text-gray-700">
+                            <p class="text-gray-500">Add expenses to see settlement instructions.</p>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -225,7 +229,7 @@
 
         // --- IMPORTANT: HARDCODED FIREBASE CONFIGURATION & CREDENTIALS ---
         // !! SECURITY WARNING: HARDCODING USER CREDENTIALS IS NOT SECURE !!
-        // This is ONLY for private, controlled demos where security is not a concern.
+        // This is ONLY for personal, private, or controlled demos where security is not a primary concern.
         // Anyone can view your HTML source and get these details.
         const firebaseConfig = {
             apiKey: "AIzaSyBR89whTjT7KXUQCryYQW58eWGZx04P3ww",
@@ -250,11 +254,14 @@
         if (!firebaseConfigured) {
             console.error("Firebase configuration is missing or incomplete.");
             document.getElementById('loadingIndicator').innerHTML = '<p class="text-red-600">Firebase not configured. Please open index.html and update `firebaseConfig` and auto-login credentials.</p>';
-            document.getElementById('appContainer').classList.remove('hidden');
-            document.getElementById('userIdDisplay').textContent = 'User ID: CONFIG ERROR';
+            document.getElementById('appContainer').classList.remove('hidden'); // Ensure app content is hidden
+            document.getElementById('authPage').classList.remove('hidden'); // Show auth page even if not configured, but disable inputs
+            document.getElementById('userIdDisplay').textContent = 'User ID: N/A (Persistence Disabled)';
+            
+            // Disable all interactive elements if Firebase is not configured
             document.getElementById('createTripBtn').disabled = true;
             document.getElementById('addExpenseBtn').disabled = true;
-            // No return here, allow script to continue
+            // Removed auth page buttons as authPage is now a fallback check
         } else {
             app = initializeApp(firebaseConfig);
             db = getFirestore(app);
@@ -296,6 +303,7 @@
         const totalExpensesSpan = document.getElementById('totalExpenses');
         const sharePerPersonSpan = document.getElementById('sharePerPerson');
         const balancesDiv = document.getElementById('balances');
+        const settlementBreakdownDiv = document.getElementById('settlementBreakdown'); // New element for breakdown
         const expenseMessageBox = document.getElementById('expenseMessageBox');
 
         // --- Authentication and Initialization ---
@@ -634,7 +642,7 @@
         function calculateAndRenderBalances() {
             let totalExpenses = 0;
             const memberSpending = {};
-            currentTripMembers.forEach(member => (memberSpending[member] = 0));
+            currentTripMembers.forEach(member => (memberSpending[member] = 0)); // Initialize spending
 
             expenses.forEach(expense => {
                 totalExpenses += expense.amount;
@@ -651,25 +659,96 @@
             sharePerPersonSpan.textContent = `₹${sharePerPerson.toFixed(2)}`;
 
             balancesDiv.innerHTML = '';
+            settlementBreakdownDiv.innerHTML = ''; // Clear previous breakdown
+
             if (expenses.length === 0 && currentTripMembers.length > 0) {
                 balancesDiv.innerHTML = '<p class="text-gray-500">No expenses yet. Add some to see balances.</p>';
+                settlementBreakdownDiv.innerHTML = '<p class="text-gray-500">Add expenses to see settlement instructions.</p>';
+                return;
             } else if (currentTripMembers.length === 0) {
                  balancesDiv.innerHTML = '<p class="text-red-500">No members defined for this trip. Please check trip settings.</p>';
+                 settlementBreakdownDiv.innerHTML = '<p class="text-red-500">Cannot calculate settlement without members.</p>';
+                 return;
             }
-            else {
-                currentTripMembers.forEach(member => {
-                    const balance = memberSpending[member] - sharePerPerson;
+            
+            // Calculate net balance for each person
+            const balances = {};
+            currentTripMembers.forEach(member => {
+                balances[member] = memberSpending[member] - sharePerPerson;
+            });
+
+            // Render individual balances (who owes/is owed in total)
+            currentTripMembers.forEach(member => {
+                const balance = balances[member];
+                const p = document.createElement('p');
+                p.classList.add('text-gray-700');
+                if (balance < -0.01) { // Use a small epsilon to avoid floating point issues near zero
+                    p.innerHTML = `<span class="font-semibold">${member}</span> owes <span class="owed">₹${Math.abs(balance).toFixed(2)}</span>`;
+                } else if (balance > 0.01) {
+                    p.innerHTML = `<span class="font-semibold">${member}</span> is owed <span class="is-owed">₹${balance.toFixed(2)}</span>`;
+                } else {
+                    p.innerHTML = `<span class="font-semibold">${member}</span> is settled <span class="font-medium text-gray-500">(₹0.00)</span>`;
+                }
+                balancesDiv.appendChild(p);
+            });
+
+            // --- Settlement Logic (Who Pays Whom) ---
+            const debtors = [];    // People who owe money
+            const creditors = [];  // People who are owed money
+            const epsilon = 0.01; // Small value for floating point comparison
+
+            // Populate debtors and creditors lists
+            for (const member of currentTripMembers) {
+                const balance = balances[member];
+                if (balance < -epsilon) {
+                    debtors.push({ name: member, amount: Math.abs(balance) });
+                } else if (balance > epsilon) {
+                    creditors.push({ name: member, amount: balance });
+                }
+            }
+
+            // Sort them to facilitate efficient settlement (largest debt/credit first)
+            debtors.sort((a, b) => b.amount - a.amount);
+            creditors.sort((a, b) => b.amount - a.amount);
+
+            const transactions = [];
+
+            while (debtors.length > 0 && creditors.length > 0) {
+                let debtor = debtors[0];
+                let creditor = creditors[0];
+
+                // Determine the amount to transfer
+                const transferAmount = Math.min(debtor.amount, creditor.amount);
+
+                if (transferAmount > 0.01) { // Only record significant transfers
+                    transactions.push(`${debtor.name} pays ${creditor.name} ₹${transferAmount.toFixed(2)}`);
+                }
+
+                // Update balances
+                debtor.amount -= transferAmount;
+                creditor.amount -= transferAmount;
+
+                // Remove fully settled debtors/creditors
+                if (debtor.amount < epsilon) {
+                    debtors.shift(); // Remove from beginning
+                }
+                if (creditor.amount < epsilon) {
+                    creditors.shift(); // Remove from beginning
+                }
+            }
+
+            // Render settlement breakdown
+            if (transactions.length > 0) {
+                transactions.forEach(transaction => {
                     const p = document.createElement('p');
-                    p.classList.add('text-gray-700');
-                    if (balance < -0.01) { // Use a small epsilon to avoid floating point issues near zero
-                        p.innerHTML = `<span class="font-semibold">${member}</span> owes <span class="owed">₹${Math.abs(balance).toFixed(2)}</span>`;
-                    } else if (balance > 0.01) {
-                        p.innerHTML = `<span class="font-semibold">${member}</span> is owed <span class="is-owed">₹${balance.toFixed(2)}</span>`;
-                    } else {
-                        p.innerHTML = `<span class="font-semibold">${member}</span> is settled <span class="font-medium text-gray-500">(₹0.00)</span>`;
-                    }
-                    balancesDiv.appendChild(p);
+                    p.className = 'text-gray-700 font-medium';
+                    p.textContent = transaction;
+                    settlementBreakdownDiv.appendChild(p);
                 });
+            } else if (expenses.length > 0) {
+                settlementBreakdownDiv.innerHTML = '<p class="text-gray-500">All balances are settled or no transfers needed.</p>';
+            } else {
+                settlementBreakdownDiv.innerHTML = '<p class="text-gray-500">Add expenses to see settlement instructions.</p>';
             }
         }
 
