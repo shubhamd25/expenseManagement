@@ -238,7 +238,6 @@
             document.getElementById('userIdDisplay').textContent = 'User ID: N/A (Persistence Disabled)';
             document.getElementById('createTripBtn').disabled = true; // Disable features that need Firebase
             document.getElementById('addExpenseBtn').disabled = true;
-            return; // Stop script execution if Firebase is not configured
         } else {
             app = initializeApp(firebaseConfig);
             db = getFirestore(app);
