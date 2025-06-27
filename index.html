@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Persistent Expense Splitter</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f0f4f8; /* Light blue-gray background */
+        }
+        .card {
+            background-color: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+        .btn-primary {
+            background-color: #4f46e5; /* Indigo 600 */
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            transition: background-color 0.2s;
+        }
+        .btn-primary:hover {
+            background-color: #4338ca; /* Indigo 700 */
+        }
+        .btn-secondary {
+            background-color: #e5e7eb; /* Gray 200 */
+            color: #4b5563; /* Gray 600 */
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            transition: background-color 0.2s;
+        }
+        .btn-secondary:hover {
+            background-color: #d1d5db; /* Gray 300 */
+        }
+        .input-field {
+            padding: 0.6rem 0.8rem;
+            border-radius: 8px;
+            border: 1px solid #d1d5db; /* Gray 300 */
+            width: 100%;
+            box-sizing: border-box; /* Include padding in width */
+        }
+        table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+        }
+        th, td {
+            padding: 0.75rem 1rem;
+            text-align: left;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        th {
+            background-color: #f9fafb;
+            font-weight: 600;
+        }
+        tr:last-child td {
+            border-bottom: none;
+        }
+        th:first-child { border-top-left-radius: 8px; }
+        th:last-child { border-top-right-radius: 8px; }
+        tr:last-child td:first-child { border-bottom-left-radius: 8px; }
+        tr:last-child td:last-child { border-bottom-right-radius: 8px; }
+        .owed { color: #dc2626; font-weight: 600; }
+        .owed::before { content: '- '; }
+        .is-owed { color: #16a34a; font-weight: 600; }
+        .is-owed::before { content: '+ '; }
+        .delete-btn {
+            background-color: #ef4444; /* Red 500 */
+            color: white;
+            padding: 0.3rem 0.6rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            transition: background-color 0.2s;
+        }
+        .delete-btn:hover {
+            background-color: #dc2626; /* Red 600 */
+        }
+        /* Loading indicator */
+        .loading-spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            border-left-color: #4f46e5;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="p-4 sm:p-6 md:p-8 flex justify-center items-start min-h-screen">
+    <div class="container max-w-4xl w-full">
+        <h1 class="text-4xl font-bold text-center text-gray-800 mb-8 mt-4">Expense Splitter</h1>
+        <p id="userIdDisplay" class="text-sm text-center text-gray-500 mb-4">User ID: Loading...</p>
+        <div id="loadingIndicator" class="text-center p-4">
+            <div class="loading-spinner mx-auto"></div>
+            <p class="mt-2 text-gray-600">Loading application...</p>
+        </div>
+
+        <!-- Main Views Container -->
+        <div id="appContainer" class="hidden">
+            <!-- Home Page View -->
+            <div id="homePage" class="card p-6 mb-8">
+                <h2 class="text-2xl font-semibold text-gray-700 mb-4">Your Trips</h2>
+
+                <div class="mb-6">
+                    <h3 class="text-xl font-medium text-gray-700 mb-2">Create New Trip</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                        <div>
+                            <label for="newTripName" class="block text-sm font-medium text-gray-700 mb-1">Trip Name</label>
+                            <input type="text" id="newTripName" placeholder="e.g., Summer Vacation 2025" class="input-field" />
+                        </div>
+                        <div>
+                            <label for="newTripMembers" class="block text-sm font-medium text-gray-700 mb-1">Members (comma-separated)</label>
+                            <input type="text" id="newTripMembers" placeholder="e.g., Alice, Bob, Charlie" class="input-field" value="Alice, Bob, Charlie, Diana" />
+                        </div>
+                    </div>
+                    <button id="createTripBtn" class="btn-primary w-full md:w-auto">Create Trip</button>
+                    <div id="tripMessageBox" class="mt-4 text-sm font-medium text-red-600"></div>
+                </div>
+
+                <h3 class="text-xl font-medium text-gray-700 mb-2">Existing Trips</h3>
+                <div id="tripList" class="space-y-4">
+                    <p class="text-gray-500 text-center">No trips found. Create one!</p>
+                </div>
+            </div>
+
+            <!-- Trip Details Page View (Hidden by default) -->
+            <div id="tripDetailsPage" class="hidden">
+                <button id="backToHomeBtn" class="btn-secondary mb-6 flex items-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5 mr-2">
+                        <path fill-rule="evenodd" d="M17 10a.75.75 0 01-.75.75H5.612l4.158 3.96a.75.75 0 11-1.04 1.08l-5.5-5.25a.75.75 0 010-1.08l5.5-5.25a.75.75 0 111.04 1.08L5.612 9.25H16.25A.75.75 0 0117 10z" clip-rule="evenodd" />
+                    </svg>
+                    Back to Trips
+                </button>
+
+                <div class="card p-6 mb-8">
+                    <h2 class="text-2xl font-semibold text-gray-700 mb-2">Trip: <span id="currentTripName" class="font-bold"></span></h2>
+                    <p class="text-gray-600 mb-4">Members: <span id="currentTripMembersList"></span></p>
+
+                    <!-- Add New Expense Section -->
+                    <h3 class="text-xl font-medium text-gray-700 mb-2">Add New Expense</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                        <div>
+                            <label for="description" class="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                            <input type="text" id="description" placeholder="e.g., Dinner at ABC" class="input-field" />
+                        </div>
+                        <div>
+                            <label for="amount" class="block text-sm font-medium text-gray-700 mb-1">Amount ($)</label>
+                            <input type="number" id="amount" placeholder="e.g., 50.75" step="0.01" class="input-field" />
+                        </div>
+                        <div>
+                            <label for="payer" class="block text-sm font-medium text-gray-700 mb-1">Payer</label>
+                            <select id="payer" class="input-field">
+                                <!-- Options will be populated by JavaScript based on trip members -->
+                            </select>
+                        </div>
+                    </div>
+                    <button id="addExpenseBtn" class="btn-primary w-full md:w-auto">Add Expense</button>
+                    <div id="expenseMessageBox" class="mt-4 text-sm font-medium text-red-600"></div>
+                </div>
+
+                <!-- Expense List Section -->
+                <div class="card p-6 mb-8">
+                    <h2 class="text-2xl font-semibold text-gray-700 mb-4">Expense List</h2>
+                    <div class="overflow-x-auto rounded-lg border border-gray-200">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payer</th>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="expenseListBody" class="bg-white divide-y divide-gray-200">
+                                <!-- Expense rows will be inserted here by JavaScript -->
+                            </tbody>
+                        </table>
+                        <p id="noExpensesMessage" class="px-6 py-4 text-gray-500 text-center">No expenses added yet for this trip.</p>
+                    </div>
+                </div>
+
+                <!-- Summary and Balances Section -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div class="card p-6">
+                        <h2 class="text-2xl font-semibold text-gray-700 mb-4">Summary</h2>
+                        <p class="text-gray-600 mb-2">Total Expenses: <span id="totalExpenses" class="font-bold text-gray-800">$0.00</span></p>
+                        <p class="text-gray-600">Share per Person: <span id="sharePerPerson" class="font-bold text-gray-800">$0.00</span></p>
+                    </div>
+
+                    <div class="card p-6">
+                        <h2 class="text-2xl font-semibold text-gray-700 mb-4">Who Owes Whom</h2>
+                        <div id="balances" class="space-y-2">
+                            <!-- Balances will be displayed here by JavaScript -->
+                            <p class="text-gray-500">Add expenses to see balances.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase SDKs (using CDN for simplicity) -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, onSnapshot, doc, deleteDoc, query, orderBy, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // --- IMPORTANT: REPLACE WITH YOUR OWN FIREBASE CONFIGURATION ---
+        // 1. Go to Firebase Console: console.firebase.google.com
+        // 2. Create a new project.
+        // 3. Add a Web App to your project (the </> icon).
+        // 4. Copy the config object provided and paste it below.
+        const firebaseConfig = {
+             apiKey: "AIzaSyBR89whTjT7KXUQCryYQW58eWGZx04P3ww",
+              authDomain: "expense-a9f91.firebaseapp.com",
+              projectId: "expense-a9f91",
+              storageBucket: "expense-a9f91.firebasestorage.app",
+              messagingSenderId: "318423917055",
+              appId: "1:318423917055:web:c11e59fd251e6bd56807ca",
+              measurementId: "G-58QSSS0JLK"
+        };
+
+        // --- Firebase Initialization ---
+        let app, db, auth;
+        // Check if config values are still placeholders
+        if (firebaseConfig.apiKey === "YOUR_API_KEY" || !firebaseConfig.projectId || firebaseConfig.projectId === "YOUR_PROJECT_ID") {
+            console.error("Firebase configuration is missing or incomplete. Please update firebaseConfig with your project details.");
+            document.getElementById('loadingIndicator').innerHTML = '<p class="text-red-600">Firebase not configured. Please open index.html and update `firebaseConfig` with your project details.</p>';
+            document.getElementById('appContainer').classList.remove('hidden');
+            document.getElementById('userIdDisplay').textContent = 'User ID: N/A (Persistence Disabled)';
+            document.getElementById('createTripBtn').disabled = true; // Disable features that need Firebase
+            document.getElementById('addExpenseBtn').disabled = true;
+            return; // Stop script execution if Firebase is not configured
+        } else {
+            app = initializeApp(firebaseConfig);
+            db = getFirestore(app);
+            auth = getAuth(app);
+        }
+        
+        let userId = null;
+        let currentTripId = null;
+        let currentTripMembers = []; // Stores members for the currently active trip
+        let expenses = []; // Global array to hold expenses for the current trip
+
+        // --- DOM Elements ---
+        const loadingIndicator = document.getElementById('loadingIndicator');
+        const appContainer = document.getElementById('appContainer');
+        const userIdDisplay = document.getElementById('userIdDisplay');
+
+        // Home Page Elements
+        const homePage = document.getElementById('homePage');
+        const newTripNameInput = document.getElementById('newTripName');
+        const newTripMembersInput = document.getElementById('newTripMembers');
+        const createTripBtn = document.getElementById('createTripBtn');
+        const tripListDiv = document.getElementById('tripList');
+        const tripMessageBox = document.getElementById('tripMessageBox');
+
+        // Trip Details Page Elements (re-used from previous version, now updated for dynamic members/data)
+        const tripDetailsPage = document.getElementById('tripDetailsPage');
+        const backToHomeBtn = document.getElementById('backToHomeBtn');
+        const currentTripNameSpan = document.getElementById('currentTripName');
+        const currentTripMembersListSpan = document.getElementById('currentTripMembersList');
+        const descriptionInput = document.getElementById('description');
+        const amountInput = document.getElementById('amount');
+        const payerSelect = document.getElementById('payer');
+        const addExpenseBtn = document.getElementById('addExpenseBtn');
+        const expenseListBody = document.getElementById('expenseListBody');
+        const noExpensesMessage = document.getElementById('noExpensesMessage');
+        const totalExpensesSpan = document.getElementById('totalExpenses');
+        const sharePerPersonSpan = document.getElementById('sharePerPerson');
+        const balancesDiv = document.getElementById('balances');
+        const expenseMessageBox = document.getElementById('expenseMessageBox');
+
+        // --- Authentication and Initialization ---
+        document.addEventListener('DOMContentLoaded', () => {
+            if (auth) {
+                onAuthStateChanged(auth, async (user) => {
+                    if (user) {
+                        userId = user.uid;
+                        console.log("Authenticated with user ID:", userId);
+                    } else {
+                        // Sign in anonymously if not already authenticated
+                        try {
+                            await signInAnonymously(auth);
+                            userId = auth.currentUser.uid;
+                            console.log("Signed in anonymously with user ID:", userId);
+                        } catch (error) {
+                            console.error("Firebase Anonymous Auth error:", error);
+                            userIdDisplay.textContent = 'Auth Failed: ' + error.message;
+                            loadingIndicator.classList.add('hidden');
+                            appContainer.classList.remove('hidden'); // Show app even if auth failed
+                            return;
+                        }
+                    }
+                    userIdDisplay.textContent = `User ID: ${userId}`;
+                    loadingIndicator.classList.add('hidden');
+                    appContainer.classList.remove('hidden');
+                    loadTrips(); // Load trips once authenticated
+                });
+            } else {
+                // This block is for when firebaseConfig is missing/invalid, already handled above
+            }
+        });
+
+        // --- UI State Management ---
+        function showHomePage() {
+            homePage.classList.remove('hidden');
+            tripDetailsPage.classList.add('hidden');
+            clearExpenseInputs();
+            clearTripInputs();
+            calculateAndRenderBalances([]); // Clear balances when returning home
+        }
+
+        function showTripDetailsPage() {
+            homePage.classList.add('hidden');
+            tripDetailsPage.classList.remove('hidden');
+        }
+
+        function clearExpenseInputs() {
+            descriptionInput.value = '';
+            amountInput.value = '';
+            expenseMessageBox.textContent = '';
+        }
+
+        function clearTripInputs() {
+            newTripNameInput.value = '';
+            newTripMembersInput.value = 'Alice, Bob, Charlie, Diana'; // Reset to default members
+            tripMessageBox.textContent = '';
+        }
+
+        function displayMessage(msgBoxElement, msg, type = 'error') {
+            msgBoxElement.textContent = msg;
+            msgBoxElement.className = `mt-4 text-sm font-medium ${type === 'error' ? 'text-red-600' : 'text-green-600'}`;
+        }
+
+        // --- Trip Management Functions (Firestore) ---
+        let unsubscribeTrips = null; // To store the unsubscribe function for trips
+
+        function loadTrips() {
+            if (!db || !userId) {
+                console.warn("Firestore or User ID not available for loading trips.");
+                return;
+            }
+
+            // Unsubscribe from previous listener if exists
+            if (unsubscribeTrips) {
+                unsubscribeTrips();
+            }
+
+            // Path for standard Firebase deployments: users/{userId}/trips
+            const tripsRef = collection(db, `users/${userId}/trips`);
+            unsubscribeTrips = onSnapshot(tripsRef, (snapshot) => {
+                tripListDiv.innerHTML = ''; // Clear existing list
+                if (snapshot.empty) {
+                    tripListDiv.innerHTML = '<p class="text-gray-500 text-center">No trips found. Create one!</p>';
+                    return;
+                }
+
+                snapshot.docs.forEach(docSnapshot => {
+                    const trip = docSnapshot.data();
+                    const tripId = docSnapshot.id;
+                    const tripCard = document.createElement('div');
+                    tripCard.className = 'card p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-2 sm:space-y-0 sm:space-x-4 border border-gray-200';
+                    tripCard.innerHTML = `
+                        <div>
+                            <h4 class="font-semibold text-lg text-gray-800">${trip.tripName}</h4>
+                            <p class="text-sm text-gray-600">Members: ${trip.members.join(', ')}</p>
+                            <p class="text-xs text-gray-500">Created: ${new Date(trip.createdAt).toLocaleDateString()}</p>
+                        </div>
+                        <div class="flex space-x-2">
+                            <button data-trip-id="${tripId}" data-trip-name="${trip.tripName}" data-members="${trip.members.join(',')}" class="btn-primary go-to-trip-btn text-sm">Go to Trip</button>
+                            <button data-trip-id="${tripId}" class="delete-trip-btn delete-btn text-sm">Delete</button>
+                        </div>
+                    `;
+                    tripListDiv.appendChild(tripCard);
+                });
+
+                // Attach event listeners to new buttons
+                document.querySelectorAll('.go-to-trip-btn').forEach(button => {
+                    button.onclick = (e) => {
+                        const id = e.target.dataset.tripId;
+                        const name = e.target.dataset.tripName;
+                        const membersStr = e.target.dataset.members;
+                        const membersArray = membersStr.split(',').map(m => m.trim()).filter(m => m !== '');
+                        selectTrip(id, name, membersArray);
+                    };
+                });
+                 document.querySelectorAll('.delete-trip-btn').forEach(button => {
+                    button.onclick = (e) => {
+                        const tripId = e.target.dataset.tripId;
+                        deleteTrip(tripId);
+                    };
+                });
+            }, (error) => {
+                console.error("Error loading trips:", error);
+                displayMessage(tripMessageBox, 'Error loading trips: ' + error.message);
+            });
+        }
+
+        createTripBtn.addEventListener('click', async () => {
+            if (!db || !userId) {
+                displayMessage(tripMessageBox, 'Application not ready. Please wait for Firebase to initialize or configure Firebase.');
+                return;
+            }
+
+            const tripName = newTripNameInput.value.trim();
+            let newMembers = newTripMembersInput.value.split(',').map(m => m.trim()).filter(m => m !== '');
+
+            if (!tripName) {
+                displayMessage(tripMessageBox, 'Please enter a trip name.');
+                return;
+            }
+            if (newMembers.length === 0) {
+                 displayMessage(tripMessageBox, 'Please enter at least one member.');
+                 return;
+            }
+
+            // Clear any previous error messages
+            displayMessage(tripMessageBox, '');
+
+            try {
+                // Path for standard Firebase deployments: users/{userId}/trips
+                const docRef = await addDoc(collection(db, `users/${userId}/trips`), {
+                    tripName: tripName,
+                    members: newMembers,
+                    createdAt: Date.now(),
+                    createdBy: userId
+                });
+                displayMessage(tripMessageBox, 'Trip created successfully!', 'success');
+                clearTripInputs(); // Clear form after successful creation
+            } catch (e) {
+                console.error("Error adding document: ", e);
+                displayMessage(tripMessageBox, 'Error creating trip: ' + e.message);
+            }
+        });
+
+        async function deleteTrip(tripId) {
+            if (!db || !userId) return;
+
+            if (!confirm('Are you sure you want to delete this trip and all its expenses?')) {
+                return; // User cancelled
+            }
+
+            try {
+                // Delete all expenses within the trip's subcollection first (Firestore limitation: no cascade delete)
+                // Path for standard Firebase deployments: users/{userId}/trips/{tripId}/expenses
+                const expensesRef = collection(db, `users/${userId}/trips/${tripId}/expenses`);
+                const q = query(expensesRef); // Fetch all expenses
+                const snapshot = await getDocs(q); // Use getDocs for a one-time fetch
+
+                const deletePromises = [];
+                snapshot.forEach(expenseDoc => {
+                    deletePromises.push(deleteDoc(doc(db, `users/${userId}/trips/${tripId}/expenses`, expenseDoc.id)));
+                });
+                await Promise.all(deletePromises);
+
+                // Now delete the trip document itself
+                // Path for standard Firebase deployments: users/{userId}/trips/{tripId}
+                await deleteDoc(doc(db, `users/${userId}/trips`, tripId));
+                displayMessage(tripMessageBox, 'Trip and all its expenses deleted successfully!', 'success');
+            } catch (e) {
+                console.error("Error deleting trip: ", e);
+                displayMessage(tripMessageBox, 'Error deleting trip: ' + e.message);
+            }
+        }
+
+
+        // --- Expense Management Functions (Firestore) ---
+        let unsubscribeExpenses = null; // To store the unsubscribe function for expenses
+
+        function selectTrip(tripId, tripName, membersArray) {
+            currentTripId = tripId;
+            currentTripMembers = membersArray;
+
+            currentTripNameSpan.textContent = tripName;
+            currentTripMembersListSpan.textContent = membersArray.join(', ');
+
+            populatePayerDropdown(membersArray); // Populate dropdown with trip-specific members
+            showTripDetailsPage();
+            loadExpenses(tripId); // Load expenses for the selected trip
+        }
+
+        function populatePayerDropdown(members) {
+            payerSelect.innerHTML = ''; // Clear existing options
+            members.forEach(member => {
+                const option = document.createElement('option');
+                option.value = member;
+                option.textContent = member;
+                payerSelect.appendChild(option);
+            });
+            // Select the first member by default if available
+            if (members.length > 0) {
+                payerSelect.value = members[0];
+            }
+        }
+
+        function loadExpenses(tripId) {
+            if (!db || !userId) {
+                console.warn("Firestore or User ID not available for loading expenses.");
+                return;
+            }
+
+            // Unsubscribe from previous listener if exists
+            if (unsubscribeExpenses) {
+                unsubscribeExpenses();
+            }
+
+            // Path for standard Firebase deployments: users/{userId}/trips/{tripId}/expenses
+            const expensesRef = collection(db, `users/${userId}/trips/${tripId}/expenses`);
+            const q = query(expensesRef, orderBy("timestamp", "asc")); // Order expenses by timestamp
+            unsubscribeExpenses = onSnapshot(q, (snapshot) => {
+                const loadedExpenses = [];
+                console.log("Firestore onSnapshot: Received data for expenses."); // DEBUG LOG
+                console.log("Snapshot empty:", snapshot.empty); // DEBUG LOG
+                
+                snapshot.forEach(docSnapshot => {
+                    loadedExpenses.push({ id: docSnapshot.id, ...docSnapshot.data() });
+                });
+                console.log("Loaded Expenses Array:", loadedExpenses); // DEBUG LOG
+
+                expenses = loadedExpenses; // Update the global expenses array
+                renderExpenses();
+                calculateAndRenderBalances();
+            }, (error) => {
+                console.error("Error loading expenses:", error);
+                displayMessage(expenseMessageBox, 'Error loading expenses: ' + error.message);
+            });
+        }
+
+        addExpenseBtn.addEventListener('click', async () => {
+            if (!db || !userId || !currentTripId) {
+                displayMessage(expenseMessageBox, 'Please select a trip first, or application not ready.');
+                return;
+            }
+
+            const description = descriptionInput.value.trim();
+            const amount = parseFloat(amountInput.value);
+            const payer = payerSelect.value;
+
+            if (!description || isNaN(amount) || amount <= 0 || !payer) {
+                displayMessage(expenseMessageBox, 'Please fill in all fields correctly (Amount must be a positive number).');
+                return;
+            }
+
+            displayMessage(expenseMessageBox, ''); // Clear previous error
+
+            try {
+                // Path for standard Firebase deployments: users/{userId}/trips/{tripId}/expenses
+                await addDoc(collection(db, `users/${userId}/trips/${currentTripId}/expenses`), {
+                    description: description,
+                    amount: amount,
+                    payer: payer,
+                    timestamp: Date.now() // Add a timestamp for ordering
+                });
+                displayMessage(expenseMessageBox, 'Expense added successfully!', 'success');
+                clearExpenseInputs();
+            } catch (e) {
+                console.error("Error adding expense: ", e);
+                displayMessage(expenseMessageBox, 'Error adding expense: ' + e.message);
+            }
+        });
+
+        async function deleteExpense(expenseId) {
+            if (!db || !userId || !currentTripId) return;
+
+            if (!confirm('Are you sure you want to delete this expense?')) {
+                return; // User cancelled
+            }
+
+            try {
+                // Path for standard Firebase deployments: users/{userId}/trips/{tripId}/expenses/{expenseId}
+                await deleteDoc(doc(db, `users/${userId}/trips/${currentTripId}/expenses`, expenseId));
+                displayMessage(expenseMessageBox, 'Expense deleted successfully!', 'success');
+            } catch (e) {
+                console.error("Error deleting expense: ", e);
+                displayMessage(expenseMessageBox, 'Error deleting expense: ' + e.message);
+            }
+        }
+
+        // --- UI Rendering Functions (Local Data) ---
+        function renderExpenses() {
+            expenseListBody.innerHTML = '';
+            if (expenses.length === 0) {
+                noExpensesMessage.classList.remove('hidden');
+            } else {
+                noExpensesMessage.classList.add('hidden');
+            }
+
+            expenses.forEach(expense => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-800">${expense.description}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-800">$${expense.amount.toFixed(2)}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-800">${expense.payer}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-800">
+                        <button class="delete-btn" onclick="deleteExpense('${expense.id}')">Delete</button>
+                    </td>
+                `;
+                expenseListBody.appendChild(row);
+            });
+        }
+
+        function calculateAndRenderBalances() {
+            let totalExpenses = 0;
+            const memberSpending = {};
+            currentTripMembers.forEach(member => (memberSpending[member] = 0));
+
+            expenses.forEach(expense => {
+                totalExpenses += expense.amount;
+                // Ensure payer exists in currentTripMembers to avoid errors for old data/typos
+                if (currentTripMembers.includes(expense.payer)) {
+                    memberSpending[expense.payer] += expense.amount;
+                }
+            });
+
+            const numMembers = currentTripMembers.length;
+            const sharePerPerson = numMembers > 0 ? totalExpenses / numMembers : 0;
+
+            totalExpensesSpan.textContent = `$${totalExpenses.toFixed(2)}`;
+            sharePerPersonSpan.textContent = `$${sharePerPerson.toFixed(2)}`;
+
+            balancesDiv.innerHTML = '';
+            if (expenses.length === 0 && currentTripMembers.length > 0) {
+                balancesDiv.innerHTML = '<p class="text-gray-500">No expenses yet. Add some to see balances.</p>';
+            } else if (currentTripMembers.length === 0) {
+                 balancesDiv.innerHTML = '<p class="text-red-500">No members defined for this trip. Please check trip settings.</p>';
+            }
+            else {
+                currentTripMembers.forEach(member => {
+                    const balance = memberSpending[member] - sharePerPerson;
+                    const p = document.createElement('p');
+                    p.classList.add('text-gray-700');
+                    if (balance < -0.01) { // Use a small epsilon to avoid floating point issues near zero
+                        p.innerHTML = `<span class="font-semibold">${member}</span> owes <span class="owed">$${Math.abs(balance).toFixed(2)}</span>`;
+                    } else if (balance > 0.01) {
+                        p.innerHTML = `<span class="font-semibold">${member}</span> is owed <span class="is-owed">$${balance.toFixed(2)}</span>`;
+                    } else {
+                        p.innerHTML = `<span class="font-semibold">${member}</span> is settled <span class="font-medium text-gray-500">($0.00)</span>`;
+                    }
+                    balancesDiv.appendChild(p);
+                });
+            }
+        }
+
+        // --- Event Listeners ---
+        backToHomeBtn.addEventListener('click', showHomePage);
+
+        // Expose deleteExpense to global scope for onclick attribute in HTML
+        window.deleteExpense = deleteExpense;
+    </script>
+</body>
+</html>
