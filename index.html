@@ -219,25 +219,28 @@
         // 3. Add a Web App to your project (the </> icon).
         // 4. Copy the config object provided and paste it below.
         const firebaseConfig = {
-             apiKey: "AIzaSyBR89whTjT7KXUQCryYQW58eWGZx04P3ww",
-              authDomain: "expense-a9f91.firebaseapp.com",
-              projectId: "expense-a9f91",
-              storageBucket: "expense-a9f91.firebasestorage.app",
-              messagingSenderId: "318423917055",
-              appId: "1:318423917055:web:c11e59fd251e6bd56807ca",
-              measurementId: "G-58QSSS0JLK"
+                apiKey: "AIzaSyBR89whTjT7KXUQCryYQW58eWGZx04P3ww",
+                authDomain: "expense-a9f91.firebaseapp.com",
+                projectId: "expense-a9f91",
+                storageBucket: "expense-a9f91.firebasestorage.app",
+                messagingSenderId: "318423917055",
+                appId: "1:318423917055:web:c11e59fd251e6bd56807ca",
+                measurementId: "G-58QSSS0JLK"
         };
 
         // --- Firebase Initialization ---
         let app, db, auth;
         // Check if config values are still placeholders
-        if (firebaseConfig.apiKey === "YOUR_API_KEY" || !firebaseConfig.projectId || firebaseConfig.projectId === "YOUR_PROJECT_ID") {
-            console.error("Firebase configuration is missing or incomplete. Please update firebaseConfig with your project details.");
+        const firebaseConfigured = !(firebaseConfig.apiKey === "YOUR_API_KEY" || !firebaseConfig.projectId || firebaseConfig.projectId === "YOUR_PROJECT_ID");
+
+        if (!firebaseConfigured) {
+            console.error("Firebase configuration is missing or incomplete. Please open index.html and update `firebaseConfig` with your project details.");
             document.getElementById('loadingIndicator').innerHTML = '<p class="text-red-600">Firebase not configured. Please open index.html and update `firebaseConfig` with your project details.</p>';
             document.getElementById('appContainer').classList.remove('hidden');
             document.getElementById('userIdDisplay').textContent = 'User ID: N/A (Persistence Disabled)';
             document.getElementById('createTripBtn').disabled = true; // Disable features that need Firebase
             document.getElementById('addExpenseBtn').disabled = true;
+            // No return here, allow script to continue and display error message
         } else {
             app = initializeApp(firebaseConfig);
             db = getFirestore(app);
@@ -280,7 +283,8 @@
 
         // --- Authentication and Initialization ---
         document.addEventListener('DOMContentLoaded', () => {
-            if (auth) {
+            // Only proceed with Firebase auth if app and auth objects were initialized
+            if (auth) { // Check if 'auth' object exists before using it
                 onAuthStateChanged(auth, async (user) => {
                     if (user) {
                         userId = user.uid;
@@ -294,9 +298,12 @@
                         } catch (error) {
                             console.error("Firebase Anonymous Auth error:", error);
                             userIdDisplay.textContent = 'Auth Failed: ' + error.message;
+                            // Still show app, but with auth failed message
                             loadingIndicator.classList.add('hidden');
-                            appContainer.classList.remove('hidden'); // Show app even if auth failed
-                            return;
+                            appContainer.classList.remove('hidden'); 
+                            // IMPORTANT: This 'return' is inside a function and is syntactically valid.
+                            // It simply exits the 'catch' block and the 'onAuthStateChanged' callback.
+                            return; 
                         }
                     }
                     userIdDisplay.textContent = `User ID: ${userId}`;
@@ -305,7 +312,8 @@
                     loadTrips(); // Load trips once authenticated
                 });
             } else {
-                // This block is for when firebaseConfig is missing/invalid, already handled above
+                // This block handles the case where firebaseConfig is missing/invalid
+                // and 'auth' object was not initialized. No further action needed here.
             }
         });
 
