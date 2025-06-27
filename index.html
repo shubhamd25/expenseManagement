@@ -97,10 +97,18 @@
 <body class="p-4 sm:p-6 md:p-8 flex justify-center items-start min-h-screen">
     <div class="container max-w-4xl w-full">
         <h1 class="text-4xl font-bold text-center text-gray-800 mb-8 mt-4">Expense Splitter</h1>
-        <p id="userIdDisplay" class="text-sm text-center text-gray-500 mb-4">User ID: Loading...</p>
+        <p id="userIdDisplay" class="text-sm text-center text-gray-500 mb-4">User ID: Authenticating...</p>
         <div id="loadingIndicator" class="text-center p-4">
             <div class="loading-spinner mx-auto"></div>
-            <p class="mt-2 text-gray-600">Loading application...</p>
+            <p class="mt-2 text-gray-600">Attempting to auto-login...</p>
+        </div>
+
+        <!-- Authentication Page View (Removed for auto-login, keeping for context of removed elements) -->
+        <div id="authPage" class="card p-6 mb-8 hidden">
+            <!-- This section is hidden/removed because of auto-login -->
+            <!-- <h2 class="text-2xl font-semibold text-gray-700 mb-4 text-center">Sign In / Sign Up</h2> -->
+            <!-- ... other auth fields like email, password, buttons ... -->
+            <!-- <div id="authMessageBox" class="mt-4 text-sm font-medium text-red-600 text-center"></div> -->
         </div>
 
         <!-- Main Views Container -->
@@ -129,6 +137,8 @@
                 <div id="tripList" class="space-y-4">
                     <p class="text-gray-500 text-center">No trips found. Create one!</p>
                 </div>
+                <!-- Removed Sign Out button for auto-login scenario -->
+                <!-- <button id="signOutBtn" class="btn-secondary mt-6 w-full md:w-auto">Sign Out</button> -->
             </div>
 
             <!-- Trip Details Page View (Hidden by default) -->
@@ -210,37 +220,41 @@
     <!-- Firebase SDKs (using CDN for simplicity) -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getAuth, signInWithEmailAndPassword, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, addDoc, onSnapshot, doc, deleteDoc, query, orderBy, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // --- IMPORTANT: REPLACE WITH YOUR OWN FIREBASE CONFIGURATION ---
-        // 1. Go to Firebase Console: console.firebase.google.com
-        // 2. Create a new project.
-        // 3. Add a Web App to your project (the </> icon).
-        // 4. Copy the config object provided and paste it below.
+        // --- IMPORTANT: HARDCODED FIREBASE CONFIGURATION & CREDENTIALS ---
+        // !! SECURITY WARNING: HARDCODING USER CREDENTIALS IS NOT SECURE !!
+        // This is ONLY for private, controlled demos where security is not a concern.
+        // Anyone can view your HTML source and get these details.
         const firebaseConfig = {
-                apiKey: "AIzaSyBR89whTjT7KXUQCryYQW58eWGZx04P3ww",
-                authDomain: "expense-a9f91.firebaseapp.com",
-                projectId: "expense-a9f91",
-                storageBucket: "expense-a9f91.firebasestorage.app",
-                messagingSenderId: "318423917055",
-                appId: "1:318423917055:web:c11e59fd251e6bd56807ca",
-                measurementId: "G-58QSSS0JLK"
+            apiKey: "AIzaSyBR89whTjT7KXUQCryYQW58eWGZx04P3ww",
+            authDomain: "expense-a9f91.firebaseapp.com",
+            projectId: "expense-a9f91",
+            storageBucket: "expense-a9f91.firebasestorage.app",
+            messagingSenderId: "318423917055",
+            appId: "1:318423917055:web:c11e59fd251e6bd56807ca",
+            measurementId: "G-58QSSS0JLK"
         };
+
+        // --- HARDCODED USER CREDENTIALS (for auto-login) ---
+        // You MUST create this user in Firebase Authentication manually (Email/Password method)
+        const AUTO_LOGIN_EMAIL = "xyz@trip.com"; // <--- REPLACE WITH YOUR USER'S EMAIL
+        const AUTO_LOGIN_PASSWORD = "xyztrip"; // <--- REPLACE WITH YOUR USER'S PASSWORD
 
         // --- Firebase Initialization ---
         let app, db, auth;
-        // Check if config values are still placeholders
-        const firebaseConfigured = !(firebaseConfig.apiKey === "YOUR_API_KEY" || !firebaseConfig.projectId || firebaseConfig.projectId === "YOUR_PROJECT_ID");
+        // Basic check for config completion (though full values are now provided)
+        const firebaseConfigured = !(firebaseConfig.apiKey === "YOUR_API_KEY" || !firebaseConfig.projectId);
 
         if (!firebaseConfigured) {
-            console.error("Firebase configuration is missing or incomplete. Please open index.html and update `firebaseConfig` with your project details.");
-            document.getElementById('loadingIndicator').innerHTML = '<p class="text-red-600">Firebase not configured. Please open index.html and update `firebaseConfig` with your project details.</p>';
+            console.error("Firebase configuration is missing or incomplete.");
+            document.getElementById('loadingIndicator').innerHTML = '<p class="text-red-600">Firebase not configured. Please open index.html and update `firebaseConfig` and auto-login credentials.</p>';
             document.getElementById('appContainer').classList.remove('hidden');
-            document.getElementById('userIdDisplay').textContent = 'User ID: N/A (Persistence Disabled)';
-            document.getElementById('createTripBtn').disabled = true; // Disable features that need Firebase
+            document.getElementById('userIdDisplay').textContent = 'User ID: CONFIG ERROR';
+            document.getElementById('createTripBtn').disabled = true;
             document.getElementById('addExpenseBtn').disabled = true;
-            // No return here, allow script to continue and display error message
+            // No return here, allow script to continue
         } else {
             app = initializeApp(firebaseConfig);
             db = getFirestore(app);
@@ -256,6 +270,8 @@
         const loadingIndicator = document.getElementById('loadingIndicator');
         const appContainer = document.getElementById('appContainer');
         const userIdDisplay = document.getElementById('userIdDisplay');
+        const authPage = document.getElementById('authPage'); // Keeping reference, but will be hidden
+
 
         // Home Page Elements
         const homePage = document.getElementById('homePage');
@@ -264,6 +280,7 @@
         const createTripBtn = document.getElementById('createTripBtn');
         const tripListDiv = document.getElementById('tripList');
         const tripMessageBox = document.getElementById('tripMessageBox');
+
 
         // Trip Details Page Elements (re-used from previous version, now updated for dynamic members/data)
         const tripDetailsPage = document.getElementById('tripDetailsPage');
@@ -283,38 +300,37 @@
 
         // --- Authentication and Initialization ---
         document.addEventListener('DOMContentLoaded', () => {
-            // Only proceed with Firebase auth if app and auth objects were initialized
-            if (auth) { // Check if 'auth' object exists before using it
+            if (auth) { // Proceed only if Firebase Auth was successfully initialized
+                // Initial check for existing user session
                 onAuthStateChanged(auth, async (user) => {
+                    loadingIndicator.classList.add('hidden'); // Hide loading spinner once auth state is known
+
                     if (user) {
+                        // User already signed in (e.g., from a previous session)
                         userId = user.uid;
-                        console.log("Authenticated with user ID:", userId);
+                        userIdDisplay.textContent = `User ID: ${userId}`;
+                        console.log("Authenticated with existing user ID:", userId);
+                        appContainer.classList.remove('hidden'); // Show main app content
+                        loadTrips(); // Load trips once authenticated
                     } else {
-                        // Sign in anonymously if not already authenticated
+                        // No user signed in, attempt auto-login
+                        userIdDisplay.textContent = `User ID: Attempting auto-login...`;
+                        console.log("No user signed in. Attempting auto-login.");
                         try {
-                            await signInAnonymously(auth);
-                            userId = auth.currentUser.uid;
-                            console.log("Signed in anonymously with user ID:", userId);
+                            await signInWithEmailAndPassword(auth, AUTO_LOGIN_EMAIL, AUTO_LOGIN_PASSWORD);
+                            // If successful, onAuthStateChanged will fire again with the user object
                         } catch (error) {
-                            console.error("Firebase Anonymous Auth error:", error);
-                            userIdDisplay.textContent = 'Auth Failed: ' + error.message;
-                            // Still show app, but with auth failed message
-                            loadingIndicator.classList.add('hidden');
-                            appContainer.classList.remove('hidden'); 
-                            // IMPORTANT: This 'return' is inside a function and is syntactically valid.
-                            // It simply exits the 'catch' block and the 'onAuthStateChanged' callback.
-                            return; 
+                            console.error("Auto-login Failed:", error);
+                            userIdDisplay.textContent = `Auth Failed: ${error.message}. Please check hardcoded credentials and Firebase Auth settings.`;
+                            appContainer.classList.remove('hidden'); // Show app but with auth error message
+                            // Disable relevant buttons if auto-login fails permanently
+                            createTripBtn.disabled = true;
+                            addExpenseBtn.disabled = true;
                         }
                     }
-                    userIdDisplay.textContent = `User ID: ${userId}`;
-                    loadingIndicator.classList.add('hidden');
-                    appContainer.classList.remove('hidden');
-                    loadTrips(); // Load trips once authenticated
                 });
-            } else {
-                // This block handles the case where firebaseConfig is missing/invalid
-                // and 'auth' object was not initialized. No further action needed here.
             }
+            // If auth is null (firebaseConfigured is false), the error message is already displayed.
         });
 
         // --- UI State Management ---
@@ -414,7 +430,7 @@
 
         createTripBtn.addEventListener('click', async () => {
             if (!db || !userId) {
-                displayMessage(tripMessageBox, 'Application not ready. Please wait for Firebase to initialize or configure Firebase.');
+                displayMessage(tripMessageBox, 'Application not ready. Please wait for Firebase to initialize or sign in.');
                 return;
             }
 
@@ -665,3 +681,4 @@
     </script>
 </body>
 </html>
+
