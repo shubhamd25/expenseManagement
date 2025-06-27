@@ -162,7 +162,7 @@
                             <input type="text" id="description" placeholder="e.g., Dinner at ABC" class="input-field" />
                         </div>
                         <div>
-                            <label for="amount" class="block text-sm font-medium text-gray-700 mb-1">Amount ($)</label>
+                            <label for="amount" class="block text-sm font-medium text-gray-700 mb-1">Amount (Rs)</label>
                             <input type="number" id="amount" placeholder="e.g., 50.75" step="0.01" class="input-field" />
                         </div>
                         <div>
@@ -201,8 +201,8 @@
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
                     <div class="card p-6">
                         <h2 class="text-2xl font-semibold text-gray-700 mb-4">Summary</h2>
-                        <p class="text-gray-600 mb-2">Total Expenses: <span id="totalExpenses" class="font-bold text-gray-800">$0.00</span></p>
-                        <p class="text-gray-600">Share per Person: <span id="sharePerPerson" class="font-bold text-gray-800">$0.00</span></p>
+                        <p class="text-gray-600 mb-2">Total Expenses: <span id="totalExpenses" class="font-bold text-gray-800">Rs0.00</span></p>
+                        <p class="text-gray-600">Share per Person: <span id="sharePerPerson" class="font-bold text-gray-800">Rs0.00</span></p>
                     </div>
 
                     <div class="card p-6">
@@ -308,7 +308,7 @@
                     if (user) {
                         // User already signed in (e.g., from a previous session)
                         userId = user.uid;
-                        userIdDisplay.textContent = `User ID: ${userId}`;
+                        userIdDisplay.textContent = `User ID: Rs{userId}`;
                         console.log("Authenticated with existing user ID:", userId);
                         appContainer.classList.remove('hidden'); // Show main app content
                         loadTrips(); // Load trips once authenticated
@@ -321,7 +321,7 @@
                             // If successful, onAuthStateChanged will fire again with the user object
                         } catch (error) {
                             console.error("Auto-login Failed:", error);
-                            userIdDisplay.textContent = `Auth Failed: ${error.message}. Please check hardcoded credentials and Firebase Auth settings.`;
+                            userIdDisplay.textContent = `Auth Failed: Rs{error.message}. Please check hardcoded credentials and Firebase Auth settings.`;
                             appContainer.classList.remove('hidden'); // Show app but with auth error message
                             // Disable relevant buttons if auto-login fails permanently
                             createTripBtn.disabled = true;
@@ -361,7 +361,7 @@
 
         function displayMessage(msgBoxElement, msg, type = 'error') {
             msgBoxElement.textContent = msg;
-            msgBoxElement.className = `mt-4 text-sm font-medium ${type === 'error' ? 'text-red-600' : 'text-green-600'}`;
+            msgBoxElement.className = `mt-4 text-sm font-medium Rs{type === 'error' ? 'text-red-600' : 'text-green-600'}`;
         }
 
         // --- Trip Management Functions (Firestore) ---
@@ -379,7 +379,7 @@
             }
 
             // Path for standard Firebase deployments: users/{userId}/trips
-            const tripsRef = collection(db, `users/${userId}/trips`);
+            const tripsRef = collection(db, `users/Rs{userId}/trips`);
             unsubscribeTrips = onSnapshot(tripsRef, (snapshot) => {
                 tripListDiv.innerHTML = ''; // Clear existing list
                 if (snapshot.empty) {
@@ -394,13 +394,13 @@
                     tripCard.className = 'card p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-2 sm:space-y-0 sm:space-x-4 border border-gray-200';
                     tripCard.innerHTML = `
                         <div>
-                            <h4 class="font-semibold text-lg text-gray-800">${trip.tripName}</h4>
-                            <p class="text-sm text-gray-600">Members: ${trip.members.join(', ')}</p>
-                            <p class="text-xs text-gray-500">Created: ${new Date(trip.createdAt).toLocaleDateString()}</p>
+                            <h4 class="font-semibold text-lg text-gray-800">Rs{trip.tripName}</h4>
+                            <p class="text-sm text-gray-600">Members: Rs{trip.members.join(', ')}</p>
+                            <p class="text-xs text-gray-500">Created: Rs{new Date(trip.createdAt).toLocaleDateString()}</p>
                         </div>
                         <div class="flex space-x-2">
-                            <button data-trip-id="${tripId}" data-trip-name="${trip.tripName}" data-members="${trip.members.join(',')}" class="btn-primary go-to-trip-btn text-sm">Go to Trip</button>
-                            <button data-trip-id="${tripId}" class="delete-trip-btn delete-btn text-sm">Delete</button>
+                            <button data-trip-id="Rs{tripId}" data-trip-name="Rs{trip.tripName}" data-members="Rs{trip.members.join(',')}" class="btn-primary go-to-trip-btn text-sm">Go to Trip</button>
+                            <button data-trip-id="Rs{tripId}" class="delete-trip-btn delete-btn text-sm">Delete</button>
                         </div>
                     `;
                     tripListDiv.appendChild(tripCard);
@@ -451,7 +451,7 @@
 
             try {
                 // Path for standard Firebase deployments: users/{userId}/trips
-                const docRef = await addDoc(collection(db, `users/${userId}/trips`), {
+                const docRef = await addDoc(collection(db, `users/Rs{userId}/trips`), {
                     tripName: tripName,
                     members: newMembers,
                     createdAt: Date.now(),
@@ -475,19 +475,19 @@
             try {
                 // Delete all expenses within the trip's subcollection first (Firestore limitation: no cascade delete)
                 // Path for standard Firebase deployments: users/{userId}/trips/{tripId}/expenses
-                const expensesRef = collection(db, `users/${userId}/trips/${tripId}/expenses`);
+                const expensesRef = collection(db, `users/Rs{userId}/trips/Rs{tripId}/expenses`);
                 const q = query(expensesRef); // Fetch all expenses
                 const snapshot = await getDocs(q); // Use getDocs for a one-time fetch
 
                 const deletePromises = [];
                 snapshot.forEach(expenseDoc => {
-                    deletePromises.push(deleteDoc(doc(db, `users/${userId}/trips/${tripId}/expenses`, expenseDoc.id)));
+                    deletePromises.push(deleteDoc(doc(db, `users/Rs{userId}/trips/Rs{tripId}/expenses`, expenseDoc.id)));
                 });
                 await Promise.all(deletePromises);
 
                 // Now delete the trip document itself
                 // Path for standard Firebase deployments: users/{userId}/trips/{tripId}
-                await deleteDoc(doc(db, `users/${userId}/trips`, tripId));
+                await deleteDoc(doc(db, `users/Rs{userId}/trips`, tripId));
                 displayMessage(tripMessageBox, 'Trip and all its expenses deleted successfully!', 'success');
             } catch (e) {
                 console.error("Error deleting trip: ", e);
@@ -537,7 +537,7 @@
             }
 
             // Path for standard Firebase deployments: users/{userId}/trips/{tripId}/expenses
-            const expensesRef = collection(db, `users/${userId}/trips/${tripId}/expenses`);
+            const expensesRef = collection(db, `users/Rs{userId}/trips/Rs{tripId}/expenses`);
             const q = query(expensesRef, orderBy("timestamp", "asc")); // Order expenses by timestamp
             unsubscribeExpenses = onSnapshot(q, (snapshot) => {
                 const loadedExpenses = [];
@@ -577,7 +577,7 @@
 
             try {
                 // Path for standard Firebase deployments: users/{userId}/trips/{tripId}/expenses
-                await addDoc(collection(db, `users/${userId}/trips/${currentTripId}/expenses`), {
+                await addDoc(collection(db, `users/Rs{userId}/trips/Rs{currentTripId}/expenses`), {
                     description: description,
                     amount: amount,
                     payer: payer,
@@ -600,7 +600,7 @@
 
             try {
                 // Path for standard Firebase deployments: users/{userId}/trips/{tripId}/expenses/{expenseId}
-                await deleteDoc(doc(db, `users/${userId}/trips/${currentTripId}/expenses`, expenseId));
+                await deleteDoc(doc(db, `users/Rs{userId}/trips/Rs{currentTripId}/expenses`, expenseId));
                 displayMessage(expenseMessageBox, 'Expense deleted successfully!', 'success');
             } catch (e) {
                 console.error("Error deleting expense: ", e);
@@ -620,11 +620,11 @@
             expenses.forEach(expense => {
                 const row = document.createElement('tr');
                 row.innerHTML = `
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-800">${expense.description}</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-800">$${expense.amount.toFixed(2)}</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-800">${expense.payer}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-800">Rs{expense.description}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-800">RsRs{expense.amount.toFixed(2)}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-800">Rs{expense.payer}</td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-800">
-                        <button class="delete-btn" onclick="deleteExpense('${expense.id}')">Delete</button>
+                        <button class="delete-btn" onclick="deleteExpense('Rs{expense.id}')">Delete</button>
                     </td>
                 `;
                 expenseListBody.appendChild(row);
@@ -647,8 +647,8 @@
             const numMembers = currentTripMembers.length;
             const sharePerPerson = numMembers > 0 ? totalExpenses / numMembers : 0;
 
-            totalExpensesSpan.textContent = `$${totalExpenses.toFixed(2)}`;
-            sharePerPersonSpan.textContent = `$${sharePerPerson.toFixed(2)}`;
+            totalExpensesSpan.textContent = `RsRs{totalExpenses.toFixed(2)}`;
+            sharePerPersonSpan.textContent = `RsRs{sharePerPerson.toFixed(2)}`;
 
             balancesDiv.innerHTML = '';
             if (expenses.length === 0 && currentTripMembers.length > 0) {
@@ -662,11 +662,11 @@
                     const p = document.createElement('p');
                     p.classList.add('text-gray-700');
                     if (balance < -0.01) { // Use a small epsilon to avoid floating point issues near zero
-                        p.innerHTML = `<span class="font-semibold">${member}</span> owes <span class="owed">$${Math.abs(balance).toFixed(2)}</span>`;
+                        p.innerHTML = `<span class="font-semibold">Rs{member}</span> owes <span class="owed">RsRs{Math.abs(balance).toFixed(2)}</span>`;
                     } else if (balance > 0.01) {
-                        p.innerHTML = `<span class="font-semibold">${member}</span> is owed <span class="is-owed">$${balance.toFixed(2)}</span>`;
+                        p.innerHTML = `<span class="font-semibold">Rs{member}</span> is owed <span class="is-owed">RsRs{balance.toFixed(2)}</span>`;
                     } else {
-                        p.innerHTML = `<span class="font-semibold">${member}</span> is settled <span class="font-medium text-gray-500">($0.00)</span>`;
+                        p.innerHTML = `<span class="font-semibold">Rs{member}</span> is settled <span class="font-medium text-gray-500">(Rs0.00)</span>`;
                     }
                     balancesDiv.appendChild(p);
                 });
